@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simple Typing Speed Tester</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f6fb;
+      color: #122;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 760px;
+      background: white;
+      border: 1px solid #d7e0ea;
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+    }
+
+    h1 { margin: 0 0 12px 0; font-size: 20px; }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items:center; margin-bottom:12px; }
+    label { font-size: 14px; color: #4b5563; }
+
+    input[type="number"], button, textarea {
+      font-size: 14px;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e1;
+    }
+    button { cursor: pointer; background: #0ea5a4; color: white; border: none; }
+    button.ghost { background: transparent; color: #0f1724; border: 1px solid #cbd5e1; }
+
+    .content { display: flex; gap: 16px; }
+    .left { flex: 1; }
+    .right { width: 240px; }
+
+    .target {
+      min-height: 120px;
+      padding: 12px;
+      background: #fbfdff;
+      border-radius: 6px;
+      border: 1px solid #e6eef6;
+      font-family: monospace;
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+    .char { padding: 0 1px; }
+    .correct { color: #15803d; background: rgba(21,128,61,0.08); }
+    .wrong   { color: #b91c1c; background: rgba(185,28,28,0.06); }
+    .current { outline: 1px dashed rgba(14,165,164,0.35); }
+
+    .typing {
+      width: 100%;
+      margin-top: 10px;
+      resize: vertical;
+      min-height: 48px;
+    }
+
+    .stat { background:#fbfdff; border:1px solid #e6eef6; padding:8px; border-radius:6px; margin-bottom:8px; }
+    .stat b { display:block; font-size:18px; }
+
+    footer { text-align:center; color:#6b7280; margin-top:12px; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="card" role="application" aria-label="Typing test">
+    <h1>Simple Typing Speed Tester</h1>
+
+    <div class="controls">
+      <label for="duration">Duration (seconds)</label>
+      <input id="duration" type="number" value="30" min="10" max="300" step="5" />
+      <button id="next" class="ghost" type="button">Next sample</button>
+      <button id="restart" class="ghost" type="button">Restart</button>
+      <button id="finish" type="button">Finish</button>
+      <div style="margin-left:auto; font-size:14px; color:#374151;" id="status">Status: Idle</div>
+    </div>
+
+    <div class="content">
+      <div class="left">
+        <div class="target" id="target" aria-live="polite"></div>
+
+        <textarea id="typing" class="typing" placeholder="Start typing here..."></textarea>
+      </div>
+
+      <div class="right">
+        <div class="stat">
+          <div>Time left</div>
+          <b id="time">30s</b>
+        </div>
+        <div class="stat">
+          <div>WPM (gross)</div>
+          <b id="wpm">0</b>
+        </div>
+        <div class="stat">
+          <div>Accuracy</div>
+          <b id="acc">100%</b>
+        </div>
+        <div class="stat">
+          <div>Errors</div>
+          <b id="errs">0</b>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+    </footer>
+  </div>
+
+  <script>
+    var samples = [
+      {name: "Default", text: "The quick brown fox jumps over the lazy dog."},
+      {name: "Sentences", text: "Practice typing. Accuracy beats speed at first."},
+      {name: "Short", text: "Sphinx of black quartz, judge my vow."}
+    ];
+
+    var targetEl = document.getElementById('target');
+    var typingEl = document.getElementById('typing');
+    var durationEl = document.getElementById('duration');
+    var timeEl = document.getElementById('time');
+    var statusEl = document.getElementById('status');
+    var wpmEl = document.getElementById('wpm');
+    var accEl = document.getElementById('acc');
+    var errsEl = document.getElementById('errs');
+
+    var nextBtn = document.getElementById('next');
+    var restartBtn = document.getElementById('restart');
+    var finishBtn = document.getElementById('finish');
+
+    var sampleIndex = 0;
+    var chars = [];      
+    var typed = "";      
+    var timerId = null;   
+    var startTime = null;
+    var remaining = parseInt(durationEl.value, 10) || 30;
+    var running = false;
+    var totalTyped = 0;
+    var errors = 0;
+
+
+    function loadSample(i) {
+      sampleIndex = i % samples.length;
+      var text = samples[sampleIndex].text;
+
+      chars = [];
+      for (var j=0; j<text.length; j++){
+        chars.push({ch: text.charAt(j), state: 'untouched'});
+      }
+      renderTarget(0);
+      resetState(true);
+    }
+
+    function renderTarget(cursorIndex) {
+      targetEl.innerHTML = "";
+      for (var i=0; i<chars.length; i++){
+        var span = document.createElement('span'); 
+        span.className = 'char ' + (chars[i].state === 'untouched' ? '' : chars[i].state);
+        if (running && i === cursorIndex) {
+          span.className += ' current';
+        }
+        span.textContent = chars[i].ch;
+        targetEl.appendChild(span);
+      }
+    }
+
+
+    function resetState(stopTimer) {
+      typed = "";
+      typingEl.value = "";
+      totalTyped = 0;
+      errors = 0;
+      running = false;
+      startTime = null;
+      remaining = parseInt(durationEl.value, 10) || 30;
+      timeEl.textContent = remaining + "s";
+      statusEl.textContent = "Status: Idle";
+      if (stopTimer && timerId !== null) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+  
+      for (var i=0;i<chars.length;i++) chars[i].state = 'untouched';
+      updateStats();
+      renderTarget(0);
+    }
+
+    function startTimer() {
+      if (running) return;
+      running = true;
+      startTime = Date.now();
+      statusEl.textContent = "Status: Running";
+
+      timerId = setInterval(function(){
+        var elapsed = Math.floor((Date.now() - startTime)/1000);
+        var total = parseInt(durationEl.value,10) || 30;
+        var left = total - elapsed;
+        if (left <= 0) {
+          finishTest();
+          left = 0;
+        }
+        remaining = left;
+        timeEl.textContent = left + "s";
+        updateStats();
+      }, 250);
+    }
+    function finishTest() {
+      if (timerId !== null) {
+        clearInterval(timerId); timerId = null;
+      }
+      running = false;
+      statusEl.textContent = "Status: Finished";
+      updateStats(true);
+    }
+
+    function updateStats(final) {
+      var elapsedSec;
+      if (final) {
+        var totalDuration = parseInt(durationEl.value,10) || 30;
+        elapsedSec = totalDuration - remaining;
+        if (elapsedSec <= 0) elapsedSec = 1;
+      } else {
+        if (!startTime) elapsedSec = 1; else elapsedSec = Math.max(1, (Date.now() - startTime)/1000);
+      }
+
+      var minutes = Math.max(elapsedSec / 60, 1/60);
+      var grossWPM = Math.round((totalTyped / 5) / minutes); 
+      var accuracy = totalTyped === 0 ? 100 : Math.round(((totalTyped - errors) / totalTyped) * 100);
+
+      wpmEl.textContent = isFinite(grossWPM) ? grossWPM : 0;
+      accEl.textContent = accuracy + "%";
+      errsEl.textContent = errors;
+    }
+
+    function handleTyping() {
+      if (!running) startTimer();
+
+      typed = typingEl.value;
+      totalTyped = typed.length;
+
+      errors = 0;
+      for (var i=0; i<chars.length; i++){
+        var expected = chars[i].ch;
+        var given = typed.charAt(i);
+        if (given === "") {
+          chars[i].state = 'untouched';
+        } else if (given === expected) {
+          chars[i].state = 'correct';
+        } else {
+          chars[i].state = 'wrong';
+          errors++;
+        }
+      }
+      if (typed.length > chars.length) {
+        errors += (typed.length - chars.length);
+      }
+
+      var cursor = Math.min(typed.length, Math.max(0, chars.length-1));
+      renderTarget(cursor);
+      updateStats();
+    }
+    typingEl.addEventListener('input', handleTyping);
+
+    nextBtn.addEventListener('click', function(){
+      loadSample((sampleIndex + 1) % samples.length);
+      typingEl.focus();
+    });
+
+    restartBtn.addEventListener('click', function(){
+      resetState(true);
+      typingEl.focus();
+    });
+
+    finishBtn.addEventListener('click', function(){
+      finishTest();
+    });
+
+    durationEl.addEventListener('change', function(){
+      var v = parseInt(durationEl.value,10) || 30;
+      if (v < 10) v = 10;
+      durationEl.value = v;
+      remaining = v;
+      timeEl.textContent = v + "s";
+    });
+
+    loadSample(0);
+
+    console.log("Simple Typing Tester ready. Samples loaded:", samples.length);
+  </script>
+</body>
+</html>
