@@ -5,6 +5,9 @@ body {
       padding: 24px;
       display: flex;
       justify-content: center;
+      min-height: 100vh;
+      background-color: #cbd5e1;
+
     }
 
     .card {
@@ -13,8 +16,10 @@ body {
       background: white;
       border: 1px solid #d7e0ea;
       border-radius: 8px;
-      padding: 16px;
+      padding: 56px;
       box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+
+      
     }
 
     h1 { margin: 0 0 12px 0; font-size: 20px; }
@@ -26,11 +31,15 @@ body {
       padding: 8px;
       border-radius: 6px;
       border: 1px solid #cbd5e1;
+      font-family: inherit;
+      box-sizing: border-box;
+
+      transition: border-color 0.2s;
     }
     button { cursor: pointer; background: #0ea5a4; color: white; border: none; }
     button.ghost { background: transparent; color: #0f1724; border: 1px solid #cbd5e1; }
 
-    .content { display: flex; gap: 16px; }
+    .content { display: flex; gap: 46px;}
     .left { flex: 1; }
     .right { width: 240px; }
 
